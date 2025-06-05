@@ -1,14 +1,20 @@
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
-import routes from "./routes";
+import dotenv from "dotenv";
+import router from "./routes";
 
-
+dotenv.config();
 
 const app = express();
-app.use("/api", routes);
+
+// Middleware setup
 app.use(cors());
 app.use(bodyParser.json());
+app.use(express.json());
+
+// Use routes
+app.use("/api", router);
 
 app.get("/", (req, res) => {
     res.send("TypeScript Server is running!");
