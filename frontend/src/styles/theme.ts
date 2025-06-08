@@ -1,14 +1,16 @@
-
+import "styled-components";
 const theme = {
     colors: {
-        primary: "#4A90E2", // Main color
-        secondary: "#F5A623", // Accent color
-        background: "#F8F8F8",
-        text: "#333",
+        primary: "#F8F8F8",
+        select: '#e77431',
+        background: '#303030',
+        frontText: "#202854",
+        backText:'#006d91',
+        outline: '#00ba92',
     },
     fonts: {
-        main: "'Nunito Sans', sans-serif",
-        heading: "'Raleway', sans-serif",
+        heading: "'Jua', sans-serif",
+        body: "'Nunito Sans', sans-serif",
     },
 };
 
