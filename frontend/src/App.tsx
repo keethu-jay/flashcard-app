@@ -1,7 +1,8 @@
 import './App.css';
 import Home from "./routes/Home";
 import Dashboard from "./routes/Dashboard";
-import Library from "./routes/Library";
+import GenerationInput from "./routes/GenerationInput";
+import EditCards from "./routes/Editcards";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
 const router = createBrowserRouter([
@@ -14,8 +15,12 @@ const router = createBrowserRouter([
     element: <Dashboard />,
   },
   {
-    path: "/library",
-    element: <Library />,
+    path: "/generation-input",
+    element: <GenerationInput />,
+  },
+  {
+    path: "/edit-cards",
+    element: <EditCards />,
   },
 ]);
 
