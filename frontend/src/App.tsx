@@ -2,7 +2,7 @@ import './App.css';
 import Home from "./routes/Home";
 import Dashboard from "./routes/Dashboard";
 import GenerationInput from "./routes/GenerationInput";
-import EditCards from "./routes/Editcards";
+import EditCards from "./routes/EditCards";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
 const router = createBrowserRouter([
