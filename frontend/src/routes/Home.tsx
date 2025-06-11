@@ -166,7 +166,7 @@ const Home: React.FC = () => {
     const navigate = useNavigate(); // Initialize useNavigate hook
 
     const handleStartClick = () => {
-        navigate('/library'); // Navigate to the /library route
+        navigate('/generation-input'); // Navigate to the /library route
     };
 
     return (
