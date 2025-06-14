@@ -1,13 +1,161 @@
 import React from 'react';
 import Flashcard from '../components/Flashcard';
+import styled from 'styled-components'; // Re-import styled-components
 import { useNavigate } from 'react-router-dom'; // Import useNavigate for navigation
 
-// No more styled-components import here!
-// import styled from 'styled-components';
+// --- Page Layout and Background ---
+const MainLayoutContainer = styled.div`
+    display: flex; /* Use flexbox to arrange children horizontally */
+    min-height: 100vh; /* Ensure it covers the full viewport height */
+    background-color: #303030; /* Dark gray background for the entire page */
+    box-sizing: border-box; /* Include padding/border in total size */
 
-// --- No more styled components definitions for layout, title, or button! ---
+    @media (max-width: 768px) {
+        flex-direction: column; /* Stack content vertically on smaller screens */
+        align-items: center; /* Center items when stacked */
+    }
+`;
+
+// This container holds the title and will occupy the left section
+const LeftContentContainer = styled.div`
+    flex: 2; /* Takes 2 parts of the available space, e.g., ~66% */
+    display: flex;
+    flex-direction: column;
+    justify-content: center; /* Vertically center the title */
+    align-items: flex-start; /* Align title to the left */
+    padding: 20px 40px; /* Padding for the text content */
+    box-sizing: border-box;
+    overflow: hidden; /* Hide overflow if text is too long */
+
+    @media (max-width: 1024px) {
+        flex: 1.5; /* Adjust flex for slightly smaller screens */
+        padding: 10px;
+    }
+
+    @media (max-width: 768px) {
+        flex: none; /* Don't take up dynamic space */
+        width: 100%; /* Take full width on smaller screens */
+        padding: 20px;
+        align-items: center; /* Center text on smaller screens */
+        text-align: center;
+        min-height: auto; /* Allow height to collapse */
+    }
+`;
+
+const Title = styled.h1`
+    font-family: "Jua", sans-serif;
+    color: #9370DB; /* Bright purple */
+    font-size: 3em;
+    line-height: 1.2;
+    margin: 0; /* Remove default margin */
+    max-width: 600px; /* Limit title width for readability */
+
+    @media (max-width: 1024px) {
+        font-size: 2.2em;
+    }
+    @media (max-width: 768px) {
+        font-size: 2em;
+    }
+    @media (max-width: 480px) {
+        font-size: 1.6em;
+    }
+`;
+
+const StartButton = styled.button`
+    /* Initial state */
+    background-color: #F5F5DC; /* Off-white */
+    color: #FFA500; /* Bright orange text */
+    font-family: "Jua", sans-serif;
+    font-size: 1.6em;
+    padding: 15px 30px;
+    border: none;
+    border-radius: 50px; /* Highly rounded corners */
+    cursor: pointer;
+    transition: background-color 0.3s ease, color 0.3s ease, transform 0.1s ease; /* Smooth transitions */
+    margin-top: 40px; /* Space above the button, below the title */
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2); /* Subtle shadow */
+
+    /* Hover state */
+    &:hover {
+        background-color: #FFA500; /* Bright orange background */
+        color: #F8F8F8; /* Off-white text */
+        box-shadow: 0px 6px 12px rgba(0, 0, 0, 0.3); /* Slightly larger shadow on hover */
+    }
+
+    /* Active (pressed) state */
+    &:active {
+        transform: translateY(2px); /* Slight push-down effect */
+        box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2); /* Reduced shadow on press */
+    }
+
+    @media (max-width: 768px) {
+        font-size: 1.4em;
+        padding: 12px 25px;
+    }
+
+    @media (max-width: 480px) {
+        font-size: 1.2em;
+        padding: 10px 20px;
+    }
+`;
+
+// This container holds the flashcard grid and will occupy the right section (1/3 viewport)
+const RightContentContainer = styled.div`
+    flex: 1; /* Takes 1 part of the available space, e.g., ~33% */
+    display: flex;
+    justify-content: center; /* Center the grid horizontally within its container */
+    align-items: center; /* Vertically center the grid */
+    padding: 10px; /* Padding around the grid */
+    box-sizing: border-box;
+    overflow: hidden; /* Hide overflow from rotated cards */
+
+    @media (max-width: 768px) {
+        flex: none; /* Don't take up dynamic space */
+        width: 100%; /* Take full width on smaller screens */
+        min-height: 100vh; /* Ensure grid section has height */
+        /* To stack below the title, we'll change flex-direction on MainLayoutContainer */
+    }
+`;
+
+const AppContainer = styled.div`
+    display: grid;
+    grid-template-columns: repeat(3, 1fr); /* Default 3 columns */
+    gap: 10px;
+    /* No absolute positioning here, it flows within RightContentContainer */
+    max-width: 900px; /* Limit the width of the grid */
+    width: 100%; /* Take full width up to max-width */
+    transform: rotate(-10deg);
+
+    div:nth-child(3n + 2) { transform: translateY(50px); } /* Second column shifted */
+    div:nth-child(3n + 3) { transform: translateY(100px); }
+
+    /* Responsive adjustments for the grid itself */
+    @media (max-width: 768px) {
+        grid-template-columns: repeat(2, 1fr); /* 2 columns on smaller screens */
+        div:nth-child(2n + 2) { transform: translateY(50px); }
+        div:nth-child(2n + 3) { transform: translateY(0px); }
+    }
+
+    @media (max-width: 480px) {
+        grid-template-columns: 1fr; /* 1 column on very small screens */
+        transform: rotate(0deg); /* No rotation on very small screens */
+        div:nth-child(n) { transform: translateY(0px); } /* No stagger on 1 column */
+    }
+`;
+
+// FlashcardDisplayWrapper (This was an inner div in Tailwind version, now a styled component)
+const FlashcardDisplayWrapper = styled.div`
+    transform: rotate(${() => Math.random() * 20 - 10}deg); /* Random initial rotation */
+    transition: transform 0.3s ease-in-out;
+
+    &:hover {
+        transform: rotate(${() => Math.random() * 10 - 5}deg); /* Slight random rotation on hover */
+    }
+`;
+
 
 const flashcards = [
+    // ... your flashcard data remains the same ...
     { word: 'Cell', definition: 'The basic unit of structure and function in all living things.' },
     { word: 'Cell Membrane', definition: 'A cell structure that controls which substances can enter or leave the cell.' },
     { word: 'In Python, a comma-separated sequence of data items that are enclosed in a set of brackets is called a _____.', definition: 'list' },
@@ -30,68 +178,27 @@ const Home: React.FC = () => {
     const navigate = useNavigate(); // Initialize useNavigate hook
 
     const handleStartClick = () => {
-        navigate('/library'); // Navigate to the /library route
+        navigate('/generation-input'); // Navigate to the /library route (which will be GenerationInput)
     };
 
     return (
-        // MainLayoutContainer converted to div
-        <div className="flex min-h-screen bg-[#303030] box-border
-                        md:flex-col md:items-center"> {/* Media query for smaller screens */}
-
-            {/* LeftContentContainer converted to div */}
-            <div className="flex-[2] flex flex-col justify-center items-start p-10 box-border overflow-hidden
-                            lg:flex-[1.5] lg:p-4 /* Adjust flex/padding for slightly smaller screens */
-                            md:flex-none md:w-full md:p-5 md:items-center md:text-center md:min-h-0 /* Media query for smaller screens */">
-
-                {/* Title converted to h1 */}
-                <h1 className="font-jua text-[#9370DB] text-5xl leading-tight m-0 max-w-xl
-                                lg:text-3xl /* Adjust font size for slightly smaller screens */
-                                md:text-2xl /* Adjust font size for smaller screens */
-                                sm:text-xl /* Adjust font size for very small screens */">
-                    Make studying more efficient by generating flashcards made just for you
-                </h1>
-
-                {/* StartButton converted to button */}
-                <button
-                    onClick={handleStartClick}
-                    className="bg-[#F5F5DC] text-[#FFA500] font-jua text-2xl
-                                px-8 py-4 border-none rounded-full cursor-pointer
-                                transition-all duration-300 ease-in-out
-                                mt-10 shadow-lg self-center w-max
-                                hover:bg-[#FFA500] hover:text-[#F8F8F8] hover:shadow-xl
-                                active:translate-y-px active:shadow-md
-                                md:text-xl md:px-6 md:py-3 /* Responsive sizes */
-                                sm:text-lg sm:px-5 sm:py-2 /* Responsive sizes */">
+        <MainLayoutContainer>
+            <LeftContentContainer>
+                <Title>Make studying more efficient by generating flashcards made just for you</Title>
+                <StartButton onClick={handleStartClick}>
                     START NOW
-                </button>
-            </div>
-
-            {/* RightContentContainer converted to div */}
-            <div className="flex-1 flex justify-center items-center p-2.5 box-border overflow-hidden
-                            md:flex-none md:w-full md:min-h-screen /* Media query for smaller screens */">
-
-                {/* AppContainer (Flashcard Grid) converted to div */}
-                <div className="grid grid-cols-3 gap-2.5 max-w-4xl w-full transform -rotate-6
-                                md:grid-cols-2 /* 2 columns on smaller screens */
-                                sm:grid-cols-1 sm:transform-none /* 1 column, no rotation on very small screens */">
-
+                </StartButton>
+            </LeftContentContainer>
+            <RightContentContainer>
+                <AppContainer>
                     {flashcards.map((card, index) => (
-                        // Apply nth-child staggering using the plugin's variants
-                        // Note: If the plugin isn't working perfectly for nested divs,
-                        // you might need to apply a class to Flashcard component directly
-                        // or resort to a very small styled-component wrapper for these specific transforms.
-                        <div key={index} className={`
-                                        ${index % 3 === 1 ? 'md:translate-y-[50px]' : ''} /* Second column shifted for 3 cols*/
-                                        ${index % 3 === 2 ? 'md:translate-y-[100px]' : ''} /* Third column shifted for 3 cols*/
-                                        ${index % 2 === 1 && (index % 3 !== 1 && index % 3 !== 2) ? 'sm:translate-y-[50px]' : ''} /* Second column shifted for 2 cols*/
-                                        ${index % 1 === 0 && (index % 2 !== 1) ? 'sm:translate-y-0' : ''} /* No stagger for 1 col */
-                                        `}>
+                        <FlashcardDisplayWrapper key={index}> {/* Use the styled wrapper here */}
                             <Flashcard word={card.word} definition={card.definition} />
-                        </div>
+                        </FlashcardDisplayWrapper>
                     ))}
-                </div>
-            </div>
-        </div>
+                </AppContainer>
+            </RightContentContainer>
+        </MainLayoutContainer>
     );
 };
 

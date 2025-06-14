@@ -1,24 +1,24 @@
 import os
 import dotenv
-from transformers import pipeline, AutoTokenizer
+from transformers import pipeline, AutoTokenizer # AutoTokenizer will be needed for Phi-3
 from langchain_huggingface import HuggingFacePipeline
 import json
 from typing import Optional
-import psycopg2 # Import psycopg2
-from psycopg2 import sql # For safe query building
-from flask import Flask, request, jsonify # Import Flask components
-from flask_cors import CORS # Import CORS for cross-origin requests
-import uuid # For generating UUIDs for set_id
+import psycopg2
+from psycopg2 import sql
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import uuid
+import re
 
 # --- Flask App Setup ---
 app = Flask(__name__)
-CORS(app) # Enable CORS for all routes (important for frontend communication)
+CORS(app)
 
 # Load environment variables
 dotenv.load_dotenv()
 api_key = os.getenv("HUGGINGFACE_API_KEY")
 
-# Check if API key is available
 if not api_key:
     raise ValueError("Hugging Face API key is missing. Please set it in your .env file.")
 
@@ -38,51 +38,56 @@ def get_db_connection():
         return None
 
 # --- Hugging Face Pipeline Initialization ---
-flanT5_pipeline = pipeline(
+
+# Pipeline for summarization (can keep Flan-T5-Small or Base if needed for other tasks)
+# For simplicity, if you only need generation, you could remove this pipeline.
+flan_t5_summarization_model_name = "google/flan-t5-small"
+flanT5_summarization_pipeline = pipeline(
     "summarization",
-    model="google/flan-t5-small",
+    model=flan_t5_summarization_model_name,
     token=api_key
 )
+flanT5_summarization_llm = HuggingFacePipeline(pipeline=flanT5_summarization_pipeline)
 
-llama_model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-llama_tokenizer = AutoTokenizer.from_pretrained(llama_model_name, token=api_key)
 
-llama3_pipeline = pipeline(
-    "text-generation",
-    model=llama_model_name,
+# --- NEW GENERATION MODEL: microsoft/Phi-3-mini-4k-instruct ---
+phi3_model_name = "microsoft/Phi-3-mini-4k-instruct"
+# Phi-3 is a decoder-only model, so its tokenizer setup is similar to Llama/TinyLlama
+phi3_tokenizer = AutoTokenizer.from_pretrained(phi3_model_name, token=api_key)
+
+phi3_generation_pipeline = pipeline(
+    "text-generation", # Use text-generation task for Phi-3
+    model=phi3_model_name,
     token=api_key,
-    max_new_tokens=512,
+    max_new_tokens=1500,
     do_sample=True,
     temperature=0.7,
     top_k=50,
     top_p=0.95,
-    pad_token_id=llama_tokenizer.pad_token_id if llama_tokenizer.pad_token_id is not None else llama_tokenizer.eos_token_id,
-    eos_token_id=llama_tokenizer.eos_token_id,
-    return_full_text=False
+    # Phi-3 typically handles padding well, but setting eos_token_id is good.
+    # pad_token_id=phi3_tokenizer.pad_token_id if phi3_tokenizer.pad_token_id is not None else phi3_tokenizer.eos_token_id,
+    eos_token_id=phi3_tokenizer.eos_token_id,
+    return_full_text=False # Crucial to prevent prompt echoing
 )
-
-# Wrap them inside LangChain
-flanT5_llm = HuggingFacePipeline(pipeline=flanT5_pipeline)
-llama3_llm = HuggingFacePipeline(pipeline=llama3_pipeline)
+phi3_llm = HuggingFacePipeline(pipeline=phi3_generation_pipeline) # This will be your primary LLM for generation
 
 
 # --- AI Function Definitions ---
 def summarize_performance(studyData: str) -> str:
+    # Use the specific summarization pipeline if you have one
     try:
         prompt = f"Summarize the following study performance data: {studyData}"
-        response = flanT5_llm.invoke(prompt)
+        response = flanT5_summarization_llm.invoke(prompt) # Using Flan-T5-Small for summarization
         return response
     except Exception as error:
         print("Error summarizing study performance:", error)
         return "Failed to summarize study performance"
 
-# Function to generate study materials (UPDATED to store in DB)
 def generate_study_materials(
         topic: str,
         test_name: Optional[str] = None,
         intensity_level: str = "general learning"
 ) -> list[dict]:
-    # ... (existing prompt construction logic - no changes) ...
     try:
         prompt_parts = []
         prompt_parts.append(f"Generate a list of flashcards for the topic: '{topic}'.")
@@ -96,18 +101,18 @@ def generate_study_materials(
 
         intensity_level_lower = intensity_level.lower()
 
-        if "casual" in intensity_level_lower or "general" in intensity_level_lower:
+        if "casual learning" in intensity_level_lower:
             num_cards = 5
             depth_description = "Keep definitions concise and explanations brief."
             true_false_ratio = "Include 1-2 true/false questions and the rest as definitions."
-        elif "exam prep" in intensity_level_lower or "exam" in intensity_level_lower:
+        elif "personal education" in intensity_level_lower:
             num_cards = 10
-            depth_description = "Provide moderately in-depth definitions and explanations suitable for exam review."
-            true_false_ratio = "Include 3-4 true/false questions and the rest as definitions."
-        elif "comprehensive" in intensity_level_lower or "in-depth" in intensity_level_lower:
+            depth_description = "Focus on exploring key concepts and their applications for personal understanding. Provide clear explanations and diverse question types."
+            true_false_ratio = "Include a balanced mix of definition and true/false questions (e.g., 3-4 true/false)."
+        elif "comprehensive test prep" in intensity_level_lower:
             num_cards = 15
-            depth_description = "Offer comprehensive and detailed definitions with thorough explanations."
-            true_false_ratio = "Include 5-7 true/false questions and the rest as definitions."
+            depth_description = "Offer comprehensive and detailed definitions with thorough explanations and challenging questions. Prioritize deep understanding for exam readiness."
+            true_false_ratio = "Include 5-7 true/false questions with nuanced statements and the rest as detailed definitions."
         else:
             num_cards = 8
             depth_description = "Provide standard definitions and explanations."
@@ -116,84 +121,95 @@ def generate_study_materials(
         prompt_parts.append(f"Generate exactly {num_cards} flashcards.")
         prompt_parts.append(depth_description)
         prompt_parts.append(true_false_ratio)
-        prompt_parts.append("Your output MUST be a JSON array of objects. Each object should have two keys: 'front' (for the question/term) and 'back' (for the answer/definition). Ensure the JSON is well-formed.")
-        prompt_parts.append("Example format: [{'front': 'Question 1', 'back': 'Answer 1'}, {'front': 'Question 2', 'back': 'Answer 2'}]")
+
+        # === CRITICAL PROMPT INSTRUCTIONS FOR JSON OUTPUT ===
+        prompt_parts.append("Your output MUST be a JSON array of objects. Each object should have two keys: 'front' (for the question/term) and 'back' (for the answer/definition).")
+        prompt_parts.append("DO NOT include any introductory or concluding text. Respond ONLY with the JSON array.")
+        prompt_parts.append("Strictly follow this JSON structure and provide real content:")
+        prompt_parts.append("Example: [{\"front\": \"Your actual question here\", \"back\": \"Your actual answer here\"}, {\"front\": \"True or False: Statement\", \"back\": \"True/False\"}]")
 
         full_prompt_content = " ".join(prompt_parts)
-        print(f"--- Sending Prompt to LLM ---\n{full_prompt_content}\n-----------------------------")
 
-        raw_response = llama3_llm.invoke(full_prompt_content)
+        # === FORMAT PROMPT FOR PHI-3-MINI-4K-INSTRUCT'S TEMPLATE ===
+        # Phi-3-mini-4k-instruct uses the ChatML format.
+        # This is very important for it to follow instructions.
+        messages = [
+            {"role": "user", "content": full_prompt_content},
+            {"role": "assistant", "content": ""} # Assistant starts the JSON response
+        ]
+        # Apply the chat template using the tokenizer
+        # The `skip_special_tokens=True` is often used when creating prompt strings for models,
+        # but here we want the exact format string for generation.
+        # Using `apply_chat_template` is the most robust way.
+        formatted_prompt = phi3_tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+
+
+        print(f"--- Sending Prompt to LLM ---\n{formatted_prompt}\n-----------------------------")
+
+        # Step 3: Invoke the LLM with the formatted prompt (using phi3_llm)
+        raw_response = phi3_llm.invoke(formatted_prompt)
         print(f"--- Raw LLM Response ---\n{raw_response}\n--------------------------")
 
-        json_string = ""
-        example_output_marker = "Example output: "
-        if example_output_marker in raw_response:
-            start_index = raw_response.find(example_output_marker) + len(example_output_marker)
-            potential_json_string = raw_response[start_index:].strip()
-        else:
-            potential_json_string = raw_response
+        # --- JSON Parsing Logic (REUSED - should be robust) ---
+        flashcards = []
+        json_string_to_parse = ""
 
-        json_start = potential_json_string.find('[')
-        json_end = potential_json_string.rfind(']')
+        try:
+            cleaned_raw_response = raw_response.replace('```json', '').replace('```', '').strip()
+            json_string_to_parse = cleaned_raw_response
+            flashcards = json.loads(json_string_to_parse)
 
-        if json_start != -1 and json_end != -1 and json_end > json_start:
-            json_string = potential_json_string[json_start : json_end + 1]
-        else:
-            code_block_start = potential_json_string.find('```json')
-            code_block_end = potential_json_string.rfind('```')
-            if code_block_start != -1 and code_block_end != -1 and code_block_end > code_block_start:
-                json_string = potential_json_string[code_block_start + len('```json'):code_block_end].strip()
-                json_start = json_string.find('[')
-                json_end = json_string.rfind(']')
-                if json_start != -1 and json_end != -1 and json_end > json_start:
-                    json_string = json_string[json_start : json_end + 1]
-                else:
-                    raise ValueError("Could not find a valid JSON array structure in LLM response (even in code block).")
-            else:
-                raise ValueError("Could not find a valid JSON array structure in the LLM response (missing [] or code block).")
+        except json.JSONDecodeError as direct_decode_error:
+            print(f"Direct JSON decode failed: {direct_decode_error}. Attempting regex extraction and cleaning.")
 
-        json_string = json_string.replace("'", '"')
-        json_string = json_string.replace('```json', '').replace('```', '').strip()
+            cleaned_for_regex = raw_response.replace('\n', ' ').replace('\r', '').replace("'", '"').strip()
+            cleaned_for_regex = re.sub(r'\s+', ' ', cleaned_for_regex)
 
-        flashcards = json.loads(json_string)
+            pattern = r'"front"\s*:\s*"(?P<front_content>(?:[^"\\]|\\.)*?)"\s*,\s*"back"\s*:\s*"(?P<back_content>(?:[^"\\]|\\.)*?)"'
+            matches = re.findall(pattern, cleaned_for_regex)
 
+            reconstructed_flashcards_list = []
+            for match_tuple in matches:
+                reconstructed_flashcards_list.append({
+                    "front": match_tuple[0].strip(),
+                    "back": match_tuple[1].strip()
+                })
+
+            json_string_to_parse = json.dumps(reconstructed_flashcards_list, ensure_ascii=False)
+            flashcards = json.loads(json_string_to_parse)
+
+        # Basic validation
         if not isinstance(flashcards, list):
-            raise ValueError("LLM did not return a JSON array.")
+            raise ValueError("LLM did not return a JSON array after parsing.")
         for card in flashcards:
-            if not isinstance(card, dict) or 'front' not in card or 'back' not in card:
-                raise ValueError("Each flashcard in the JSON array must be an object with 'front' and 'back' keys.")
+            if not isinstance(card, dict) or 'front' not in card or card.get('front') is None or 'back' not in card or card.get('back') is None:
+                raise ValueError("Each flashcard in the JSON array must be an object with 'front' and 'back' keys, and their values must not be None.")
 
         # --- Database Storage ---
         conn = get_db_connection()
         if conn:
             try:
                 cur = conn.cursor()
-
-                # Generate a unique set_id for this batch of flashcards
-                current_set_id = str(uuid.uuid4()) # Generate a UUID string
+                current_set_id = str(uuid.uuid4())
 
                 for card in flashcards:
                     cur.execute(
                         sql.SQL("INSERT INTO flashcards (set_id, topic, test_name, intensity_level, front_text, back_text) VALUES (%s, %s, %s, %s, %s, %s)"),
                         [current_set_id, topic, test_name, intensity_level, card.get('front'), card.get('back')]
                     )
-
                 conn.commit()
                 print(f"Successfully stored {len(flashcards)} flashcards for topic '{topic}' with set_id '{current_set_id}' in the database.")
-
             except Exception as db_error:
-                conn.rollback() # Rollback changes if error occurs
+                conn.rollback()
                 print(f"Database error during flashcard storage: {db_error}")
             finally:
                 cur.close()
                 conn.close()
-        # --- End Database Storage ---
-
         return flashcards
 
     except json.JSONDecodeError as e:
         print(f"Error decoding JSON from LLM response: {e}")
-        print(f"Faulty JSON string might be (first 500 chars): {json_string[:500]}...")
+        print(f"Faulty JSON string might be (first 500 chars): {json_string_to_parse[:500]}...")
         return []
     except ValueError as e:
         print(f"Error processing LLM response: {e}")
@@ -204,7 +220,6 @@ def generate_study_materials(
 
 # --- Flask Routes ---
 
-# Endpoint to generate flashcards
 @app.route('/generate_flashcards', methods=['POST'])
 def api_generate_flashcards():
     data = request.get_json()
@@ -212,13 +227,12 @@ def api_generate_flashcards():
         return jsonify({"error": "Invalid JSON"}), 400
 
     topic = data.get('topic')
-    test_name = data.get('test') # 'test' from frontend formData
-    intensity_level = data.get('depth') # 'depth' from frontend formData
+    test_name = data.get('test')
+    intensity_level = data.get('depth')
 
     if not topic or not intensity_level:
         return jsonify({"error": "Missing topic or intensity level"}), 400
 
-    # Call your core AI function
     generated_cards = generate_study_materials(topic, test_name, intensity_level)
 
     if generated_cards:
@@ -226,7 +240,6 @@ def api_generate_flashcards():
     else:
         return jsonify({"error": "Failed to generate flashcards"}), 500
 
-# Endpoint to get all stored flashcards
 @app.route('/get_flashcards', methods=['GET'])
 def get_all_flashcards():
     conn = get_db_connection()
@@ -236,19 +249,18 @@ def get_all_flashcards():
     flashcards_list = []
     try:
         cur = conn.cursor()
-        # Order by set_id to keep sets together, then by creation date for stability
         cur.execute("SELECT id, set_id, topic, test_name, intensity_level, front_text, back_text, created_at FROM flashcards ORDER BY created_at DESC, id ASC")
         rows = cur.fetchall()
         for row in rows:
             flashcards_list.append({
                 "id": row[0],
-                "set_id": str(row[1]), # Convert UUID object to string
+                "set_id": str(row[1]),
                 "topic": row[2],
                 "test_name": row[3],
                 "intensity_level": row[4],
                 "front_text": row[5],
                 "back_text": row[6],
-                "created_at": row[7].isoformat() # Convert datetime object to ISO string
+                "created_at": row[7].isoformat()
             })
     except Exception as e:
         print(f"Error fetching flashcards from database: {e}")
@@ -260,28 +272,5 @@ def get_all_flashcards():
 
     return jsonify({"flashcards": flashcards_list}), 200
 
-
-# --- Flask App Run ---
 if __name__ == "__main__":
-    # --- COMMENT OUT OR REMOVE THE TEST BLOCK WHEN RUNNING AS FLASK APP ---
-    # print("--- Testing API Generation ---")
-    # topic1 = "Dinosaurs"
-    # test_name1 = None
-    # intensity1 = "casual learning"
-    # print(f"\nGenerating flashcards for: Topic='{topic1}', Test='{test_name1}', Intensity='{intensity1}'")
-    # flashcards_output1 = generate_study_materials(topic1, test_name1, intensity1)
-    # if flashcards_output1:
-    #     print("Generated Flashcards (Parsed Output 1):")
-    #     for i, card in enumerate(flashcards_output1):
-    #         print(f"  Flashcard {i+1}:")
-    #         print(f"    Front: {card.get('front', 'N/A')}")
-    #         print(f"    Back: {card.get('back', 'N/A')}")
-    # else:
-    #     print("  Failed to generate flashcards for Test 1.")
-    # print("-" * 50)
-    # # ... (rest of your test cases) ...
-    # print("--- Testing Complete ---")
-    # --- END COMMENT OUT ---
-
-    # --- Run Flask App ---
-    app.run(debug=True, port=5000) # Run on port 5000, debug=True for development
+    app.run(debug=False, port=5000)
