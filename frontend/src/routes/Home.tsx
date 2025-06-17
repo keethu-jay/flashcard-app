@@ -18,6 +18,9 @@ const flashcards = [
     { word: 'What century was the Song Dynasty in?', definition: '1200s' },
     { word: 'How did Islam effect trade?', definition: 'Islam created trade connections.' },
     { word: 'Who were the Aztecs?', definition: 'The Mexican ethnic group in Meso America' },
+    { word: 'What century was the Song Dynasty in?', definition: '1200s' },
+    { word: 'How did Islam effect trade?', definition: 'Islam created trade connections.' },
+    { word: 'Who were the Aztecs?', definition: 'The Mexican ethnic group in Meso America' },
 ];
 
 const Home: React.FC = () => {
@@ -28,31 +31,36 @@ const Home: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-neutral-700 flex flex-col md:flex-row items-center justify-center p-6">
-            {/* Left Content */}
-            <div className="flex-1 flex flex-col items-center md:items-start justify-center mb-10 md:mb-0 md:mr-10">
-                <h1 className="text-4xl text-violet-500 md:text-5xl font-bold text-beige-100 mb-8 font-jua text-center md:text-left drop-shadow-lg">
-                    Make studying more efficient by generating flashcards made just for you
-                </h1>
-                <button
-                    className="bg-amber-500 text-yellow-50 hover:bg-yellow-100 hover:text-amber-500 font-bold py-3 px-8 rounded-3xl text-xl shadow-md transition duration-200"
-                    onClick={handleStartClick}
-                >
-                    START NOW
-                </button>
+        <div className="relative w-full h-screen bg-gray-800 overflow-hidden">
+            <div
+                className="absolute top-0 left-0 overflow-visible"
+                style={{
+                    transform: 'rotate(18deg) translateY(-320px)',
+                    transformOrigin: 'top left',
+                    zIndex: 10,
+                }}
+            >
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-8">
+                    {flashcards.map((card, index) => (
+                        <div key={index}>
+                            <Flashcard word={card.word} definition={card.definition} />
+                        </div>
+                    ))}
+                </div>
             </div>
 
-            {/* Right Content: Flashcards */}
-            <div className="flex-1 flex flex-wrap justify-center items-center gap-6">
-                {flashcards.map((card, index) => (
-                    <div
-                        key={index}
-                        className="transform transition-transform duration-300 hover:rotate-2"
-                        style={{ rotate: `${Math.random() * 20 - 10}deg` }}
+            <div className="absolute right-0 top-0 h-full flex flex-col justify-center items-end pr-16 z-20">
+                <div className="max-w-md text-right">
+                    <h1 className="text-4xl md:text-5xl font-bold text-beige-100 mb-8 font-jua drop-shadow-lg">
+                        Make studying more efficient by generating flashcards made just for you
+                    </h1>
+                    <button
+                        className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-8 rounded-lg text-xl shadow-md transition duration-200"
+                        onClick={handleStartClick}
                     >
-                        <Flashcard word={card.word} definition={card.definition} />
-                    </div>
-                ))}
+                        START NOW
+                    </button>
+                </div>
             </div>
         </div>
     );
