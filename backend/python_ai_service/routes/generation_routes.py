@@ -15,11 +15,12 @@ def generate_flashcards():
         topic = data.get('topic')
         test_name = data.get('test_name')
         intensity_level = data.get('intensity_level')
+        context = data.get('context', '')
 
         if not all([topic, test_name, intensity_level]):
             return jsonify({"error": "Missing required fields"}), 400
 
-        flashcards = generate_study_materials(topic, test_name, intensity_level)
+        flashcards = generate_study_materials(topic, test_name, intensity_level, context)
         return jsonify({"message": "Flashcards generated successfully", "flashcards": flashcards})
 
     except Exception as e:

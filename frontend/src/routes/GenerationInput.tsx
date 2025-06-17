@@ -4,6 +4,7 @@ const GenerationInput: React.FC = () => {
   const [topic, setTopic] = useState('');
   const [test, setTest] = useState('');
   const [depth, setDepth] = useState('casual');
+  const [context, setContext] = useState('');
 
   return (
     <div className="min-h-screen bg-dark-grey flex items-center justify-center p-4">
@@ -80,6 +81,20 @@ const GenerationInput: React.FC = () => {
               <span className="text-off-white font-jua text-lg">Comprehensive test prep</span>
             </label>
           </div>
+        </div>
+
+        {/* Context Input */}
+        <div className="w-full mb-8">
+          <label className="block text-xl md:text-2xl font-jua text-purple-500 mb-3" htmlFor="context">
+            Add context, syllabus, or study guide (optional)
+          </label>
+          <textarea
+            id="context"
+            className="w-full bg-beige-100 text-gray-700 font-jua text-lg rounded-2xl px-6 py-3 outline-none focus:ring-2 focus:ring-emerald-400 placeholder-gray-400 min-h-[100px]"
+            placeholder="Paste your syllabus, study guide, or any extra context here..."
+            value={context}
+            onChange={e => setContext(e.target.value)}
+          />
         </div>
 
         {/* Submit Button */}
