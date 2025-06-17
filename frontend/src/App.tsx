@@ -1,4 +1,5 @@
 import './App.css';
+import './index.css';
 import Home from "./routes/Home";
 import Dashboard from "./routes/Dashboard";
 import GenerationInput from "./routes/GenerationInput";
