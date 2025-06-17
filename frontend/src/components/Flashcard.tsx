@@ -62,7 +62,7 @@ const CardBack = styled(CardFace)`
     color: #006d91;
     font-family: "Jua", sans-serif;
     border: 4px solid #00ba92;
-    //transform: rotateY(180deg); /* This ensures the back face is initially hidden */
+    transform: rotateY(180deg); /* Uncommented this line to properly position the back face */
 `;
 
 const Flashcard: React.FC<{ word: string; definition: string }> = ({ word, definition }) => {
