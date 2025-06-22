@@ -1,52 +1,51 @@
-from flask import Blueprint, request, jsonify, session, make_response
+from flask import Blueprint, request, jsonify, session
 from werkzeug.security import generate_password_hash, check_password_hash
 from python_ai_service.db.database import get_db_connection
 import uuid
 
 auth_bp = Blueprint('auth', __name__)
 
-@auth_bp.route('/register', methods=['POST', 'OPTIONS'])
+@auth_bp.route('/register', methods=['POST'])
 def register():
-    if request.method == 'OPTIONS':
-        response = make_response()
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'POST')
-        return response
-        
     try:
+        print("Registration request received")
         data = request.get_json()
         if not data:
+            print("No JSON data provided")
             return jsonify({"error": "No JSON data provided"}), 400
 
         username = data.get('username')
         email = data.get('email')
         password = data.get('password')
 
+        print(f"Registration attempt for username: {username}, email: {email}")
+
         if not username or not email or not password:
+            print("Missing required fields")
             return jsonify({"error": "Missing required fields"}), 400
 
-        # Hash the password
         password_hash = generate_password_hash(password)
 
         conn = get_db_connection()
         if not conn:
+            print("Database connection failed")
             return jsonify({"error": "Database connection failed"}), 500
 
         try:
             cur = conn.cursor()
+            print("Attempting to insert user into database")
             cur.execute(
                 "INSERT INTO users (username, email, password_hash) VALUES (%s, %s, %s) RETURNING id",
                 (username, email, password_hash)
             )
             user_id = cur.fetchone()[0]
             conn.commit()
+            print(f"User registered successfully with ID: {user_id}")
             
-            # Create session
             session['user_id'] = user_id
             session['username'] = username
             
-            response = jsonify({
+            return jsonify({
                 "message": "User registered successfully",
                 "user": {
                     "id": user_id,
@@ -54,43 +53,42 @@ def register():
                     "email": email
                 }
             })
-            response.headers.add('Access-Control-Allow-Origin', '*')
-            return response
             
         except Exception as e:
             conn.rollback()
+            print(f"Database error during registration: {e}")
             if "duplicate key" in str(e).lower():
                 return jsonify({"error": "Username or email already exists"}), 400
-            return jsonify({"error": str(e)}), 500
+            return jsonify({"error": f"Database error: {str(e)}"}), 500
         finally:
             cur.close()
             conn.close()
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"Unexpected error during registration: {e}")
+        return jsonify({"error": f"Registration failed: {str(e)}"}), 500
 
-@auth_bp.route('/login', methods=['POST', 'OPTIONS'])
+@auth_bp.route('/login', methods=['POST'])
 def login():
-    if request.method == 'OPTIONS':
-        response = make_response()
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'POST')
-        return response
-        
     try:
+        print("Login request received")
         data = request.get_json()
         if not data:
+            print("No JSON data provided")
             return jsonify({"error": "No JSON data provided"}), 400
 
         username = data.get('username')
         password = data.get('password')
 
+        print(f"Login attempt for username: {username}")
+
         if not username or not password:
+            print("Missing username or password")
             return jsonify({"error": "Missing username or password"}), 400
 
         conn = get_db_connection()
         if not conn:
+            print("Database connection failed")
             return jsonify({"error": "Database connection failed"}), 500
 
         try:
@@ -102,13 +100,14 @@ def login():
             user = cur.fetchone()
 
             if not user or not check_password_hash(user[3], password):
+                print("Invalid username or password")
                 return jsonify({"error": "Invalid username or password"}), 401
 
-            # Create session
+            print(f"Login successful for user: {username}")
             session['user_id'] = user[0]
             session['username'] = user[1]
             
-            response = jsonify({
+            return jsonify({
                 "message": "Login successful",
                 "user": {
                     "id": user[0],
@@ -116,34 +115,24 @@ def login():
                     "email": user[2]
                 }
             })
-            response.headers.add('Access-Control-Allow-Origin', '*')
-            return response
             
         finally:
             cur.close()
             conn.close()
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"Unexpected error during login: {e}")
+        return jsonify({"error": f"Login failed: {str(e)}"}), 500
 
-@auth_bp.route('/logout', methods=['POST', 'OPTIONS'])
+@auth_bp.route('/logout', methods=['POST'])
 def logout():
-    if request.method == 'OPTIONS':
-        response = make_response()
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'POST')
-        return response
-        
     session.clear()
-    response = jsonify({"message": "Logout successful"})
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    return response
+    return jsonify({"message": "Logout successful"})
 
 @auth_bp.route('/check-auth', methods=['GET'])
 def check_auth():
     if 'user_id' in session:
-        response = jsonify({
+        return jsonify({
             "authenticated": True,
             "user": {
                 "id": session['user_id'],
@@ -151,7 +140,4 @@ def check_auth():
             }
         })
     else:
-        response = jsonify({"authenticated": False})
-    
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    return response 
+        return jsonify({"authenticated": False}) 

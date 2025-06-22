@@ -1,4 +1,5 @@
-from flask import Blueprint, request, jsonify, make_response, session
+import uuid
+from flask import Blueprint, request, jsonify, session
 from python_ai_service.db.database import get_db_connection
 
 flashcard_bp = Blueprint('flashcard', __name__)
@@ -6,7 +7,6 @@ flashcard_bp = Blueprint('flashcard', __name__)
 @flashcard_bp.route('/get_flashcards', methods=['GET'])
 def get_flashcards():
     try:
-        # Check if user is authenticated
         if 'user_id' not in session:
             return jsonify({"error": "Authentication required"}), 401
             
@@ -15,7 +15,6 @@ def get_flashcards():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get the most recent set for this user - match the column order: id, set_id, topic, intensity_level, card_count, created_at, name, user_id
         cursor.execute('''
             SELECT s.id, s.set_id, s.topic, s.intensity_level, s.card_count, s.created_at, s.name, s.user_id
             FROM sets s 
@@ -28,13 +27,12 @@ def get_flashcards():
         if not latest_set:
             return jsonify([])
         
-        # Get flashcards for the most recent set - match the column order: id, set_id, front_text, back_text, created_at, star_status
         cursor.execute('''
             SELECT id, set_id, front_text, back_text, created_at, star_status
             FROM flashcards 
             WHERE set_id = %s 
             ORDER BY created_at DESC
-        ''', (latest_set[1],))  # Use latest_set[1] for set_id
+        ''', (latest_set[1],))
         flashcards = cursor.fetchall()
         cursor.close()
         conn.close()
@@ -42,13 +40,13 @@ def get_flashcards():
         return jsonify([{
             'id': card[0],
             'set_id': card[1],
-            'front': card[2],  # front_text
-            'back': card[3],   # back_text
+            'front': card[2],
+            'back': card[3],
             'created_at': card[4],
             'star_status': card[5]
         } for card in flashcards])
     except Exception as e:
-        print(f"Error in get_flashcards: {str(e)}")  # Add debug logging
+        print(f"Error in get_flashcards: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @flashcard_bp.route('/get_flashcards_by_set/<set_id>', methods=['GET'])
@@ -104,7 +102,6 @@ def get_flashcards_by_set(set_id):
 @flashcard_bp.route('/get_all_sets', methods=['GET'])
 def get_all_sets():
     try:
-        # Check if user is authenticated
         if 'user_id' not in session:
             return jsonify({"error": "Authentication required"}), 401
             
@@ -135,90 +132,65 @@ def get_all_sets():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@flashcard_bp.route('/update_flashcard/<int:card_id>', methods=['PUT', 'OPTIONS'])
+@flashcard_bp.route('/update_flashcard/<int:card_id>', methods=['PUT'])
 def update_flashcard(card_id):
-    if request.method == 'OPTIONS':
-        response = make_response()
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'PUT')
-        return response
-
     try:
+        if 'user_id' not in session:
+            return jsonify({"error": "Authentication required"}), 401
+
         data = request.get_json()
-        if not data or 'front' not in data or 'back' not in data:
-            return jsonify({'error': 'Missing front or back text'}), 400
+        front_text = data.get('front')
+        back_text = data.get('back')
+
+        if not front_text or not back_text:
+            return jsonify({"error": "Front and back text are required"}), 400
 
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            'UPDATE flashcards SET front_text = %s, back_text = %s WHERE id = %s RETURNING *',
-            (data['front'], data['back'], card_id)
+            "UPDATE flashcards SET front_text = %s, back_text = %s WHERE id = %s",
+            (front_text, back_text, card_id)
         )
-        updated_card = cursor.fetchone()
         conn.commit()
         cursor.close()
         conn.close()
 
-        if not updated_card:
-            return jsonify({'error': 'Flashcard not found'}), 404
-
-        return jsonify({
-            'id': updated_card[0],
-            'set_id': updated_card[1],
-            'front_text': updated_card[2],
-            'back_text': updated_card[3],
-            'star_status': updated_card[4],
-            'created_at': updated_card[5]
-        })
+        return jsonify({"message": "Flashcard updated successfully"})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@flashcard_bp.route('/toggle_star/<int:card_id>', methods=['PUT', 'OPTIONS'])
+@flashcard_bp.route('/toggle_star/<int:card_id>', methods=['PUT'])
 def toggle_star(card_id):
-    if request.method == 'OPTIONS':
-        response = make_response()
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'PUT')
-        return response
-
     try:
+        if 'user_id' not in session:
+            return jsonify({"error": "Authentication required"}), 401
+
+        data = request.get_json()
+        star_status = data.get('star_status')
+
+        if star_status is None:
+            return jsonify({"error": "Star status is required"}), 400
+
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            'UPDATE flashcards SET star_status = NOT star_status WHERE id = %s RETURNING *',
-            (card_id,)
+            "UPDATE flashcards SET star_status = %s WHERE id = %s",
+            (star_status, card_id)
         )
-        updated_card = cursor.fetchone()
         conn.commit()
         cursor.close()
         conn.close()
 
-        if not updated_card:
-            return jsonify({'error': 'Flashcard not found'}), 404
-
-        return jsonify({
-            'id': updated_card[0],
-            'set_id': updated_card[1],
-            'front_text': updated_card[2],
-            'back_text': updated_card[3],
-            'star_status': updated_card[4],
-            'created_at': updated_card[5]
-        })
+        return jsonify({"message": "Star status updated successfully"})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@flashcard_bp.route('/update_set_name/<set_id>', methods=['PUT', 'OPTIONS'])
+@flashcard_bp.route('/update_set_name/<set_id>', methods=['PUT'])
 def update_set_name(set_id):
-    if request.method == 'OPTIONS':
-        response = make_response()
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'PUT')
-        return response
-
     try:
+        if 'user_id' not in session:
+            return jsonify({"error": "Authentication required"}), 401
+
         data = request.get_json()
         if not data or 'name' not in data:
             return jsonify({'error': 'Missing name field'}), 400
@@ -246,4 +218,55 @@ def update_set_name(set_id):
             'name': updated_set[6],
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500 
+        return jsonify({'error': str(e)}), 500
+
+@flashcard_bp.route('/create_manual_set', methods=['POST'])
+def create_manual_set():
+    if 'user_id' not in session:
+        return jsonify({"error": "Authentication required"}), 401
+
+    data = request.get_json()
+    name = data.get('name')
+    cards = data.get('cards')
+    user_id = session['user_id']
+
+    if not name or not cards:
+        return jsonify({"error": "Set name and cards are required"}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        with conn.cursor() as cur:
+            set_id = str(uuid.uuid4())
+            
+            # Insert the new set
+            cur.execute(
+                """
+                INSERT INTO sets (set_id, topic, intensity_level, card_count, name, user_id)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (set_id, name, 'manual', len(cards), name, user_id)
+            )
+
+            # Insert flashcards
+            for card in cards:
+                cur.execute(
+                    """
+                    INSERT INTO flashcards (set_id, front_text, back_text, star_status)
+                    VALUES (%s, %s, %s, false)
+                    """,
+                    (set_id, card.get('front'), card.get('back'))
+                )
+        
+        conn.commit()
+        return jsonify({"message": "Set created successfully", "set_id": set_id}), 201
+    
+    except Exception as e:
+        conn.rollback()
+        print(f"Error creating manual set: {e}")
+        return jsonify({"error": "Failed to create set"}), 500
+    
+    finally:
+        conn.close() 

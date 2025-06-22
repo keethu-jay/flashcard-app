@@ -24,7 +24,7 @@ const Library: React.FC = () => {
   const fetchSets = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:5000/get_all_sets', {
+      const response = await fetch('http://localhost:5001/get_all_sets', {
         credentials: 'include'
       });
 
@@ -93,7 +93,7 @@ const Library: React.FC = () => {
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900">Your Flashcard Library</h1>
             <Link
-              to="/generate"
+              to="/create-set"
               className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
             >
               <span className="mr-2">+</span>
@@ -111,7 +111,7 @@ const Library: React.FC = () => {
               <h3 className="text-lg font-medium text-gray-900 mb-2">No flashcard sets yet</h3>
               <p className="text-gray-600 mb-6">Create your first set to get started!</p>
               <Link
-                to="/generate"
+                to="/create-set"
                 className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Create Your First Set
@@ -147,20 +147,17 @@ const Library: React.FC = () => {
                   
                   <div className="flex space-x-2">
                     <Link
-                      to={`/edit-cards?set_id=${set.set_id}`}
+                      to={`/learn/${set.set_id}`}
                       className="flex-1 bg-blue-600 text-white text-center py-2 px-4 rounded hover:bg-blue-700 transition-colors"
                     >
                       Study
                     </Link>
-                    <button
-                      onClick={() => {
-                        // TODO: Add edit functionality
-                        alert('Edit functionality coming soon!');
-                      }}
+                    <Link
+                      to={`/edit-cards/${set.set_id}`}
                       className="bg-gray-200 text-gray-700 py-2 px-4 rounded hover:bg-gray-300 transition-colors"
                     >
                       Edit
-                    </button>
+                    </Link>
                   </div>
                 </div>
               ))}

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useParams } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPen, faStar as faStarSolid, faRotate } from '@fortawesome/free-solid-svg-icons';
 import { faStar as faStarRegular } from '@fortawesome/free-regular-svg-icons';
-import FlashcardEdit from '../components/FlashcardEdit';
 
 interface FlashcardData {
   id: number;
@@ -14,6 +14,8 @@ interface FlashcardData {
 }
 
 const EditCards: React.FC = () => {
+  const { setId } = useParams<{ setId: string }>();
+  const [setName, setSetName] = useState('');
   const [flashcards, setFlashcards] = useState<FlashcardData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,9 +24,17 @@ const EditCards: React.FC = () => {
 
   useEffect(() => {
     const fetchFlashcards = async () => {
+      if (!setId) {
+        setError("No set ID provided.");
+        setLoading(false);
+        return;
+      }
       try {
-        const response = await axios.get('http://localhost:5000/get_flashcards');
-        setFlashcards(response.data);
+        const response = await axios.get(`http://localhost:5001/get_flashcards_by_set/${setId}`, {
+          withCredentials: true
+        });
+        setFlashcards(response.data.flashcards);
+        setSetName(response.data.set_info.name);
         setLoading(false);
       } catch (err) {
         console.error('Error fetching flashcards:', err);
@@ -39,7 +49,22 @@ const EditCards: React.FC = () => {
       }
     };
     fetchFlashcards();
-  }, []);
+  }, [setId]);
+
+  const handleSaveSetName = async () => {
+    if (!setId || !setName.trim()) return;
+    try {
+      await axios.put(`http://localhost:5001/update_set_name/${setId}`, {
+        name: setName
+      }, {
+        withCredentials: true
+      });
+      alert('Set name updated successfully!');
+    } catch (err) {
+      console.error('Error updating set name:', err);
+      alert('Failed to update set name.');
+    }
+  };
 
   const handleEdit = (cardId: number) => {
     const card = flashcards.find(c => c.id === cardId);
@@ -52,9 +77,11 @@ const EditCards: React.FC = () => {
   const handleSave = async (cardId: number) => {
     if (!editedContent) return;
     try {
-      await axios.put(`http://localhost:5000/update_flashcard/${cardId}`, {
+      await axios.put(`http://localhost:5001/update_flashcard/${cardId}`, {
         front: editedContent.front,
         back: editedContent.back,
+      }, {
+        withCredentials: true
       });
       setFlashcards(cards =>
         cards.map(card =>
@@ -75,8 +102,10 @@ const EditCards: React.FC = () => {
     try {
       const card = flashcards.find(c => c.id === cardId);
       if (!card) return;
-      await axios.put(`http://localhost:5000/toggle_star/${cardId}`, {
+      await axios.put(`http://localhost:5001/toggle_star/${cardId}`, {
         star_status: !card.star_status,
+      }, {
+        withCredentials: true
       });
       setFlashcards(cards =>
         cards.map(c =>
@@ -95,9 +124,11 @@ const EditCards: React.FC = () => {
       if (!card) return;
       const newFrontText = card.back;
       const newBackText = card.front;
-      await axios.put(`http://localhost:5000/update_flashcard/${cardId}`, {
+      await axios.put(`http://localhost:5001/update_flashcard/${cardId}`, {
         front: newFrontText,
         back: newBackText,
+      }, {
+        withCredentials: true
       });
       setFlashcards(cards =>
         cards.map(c =>
@@ -151,7 +182,25 @@ const EditCards: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-dark-grey flex flex-col items-center py-10 px-2">
-      <h1 className="text-4xl font-jua text-off-white mb-10 text-center font-bold drop-shadow-lg">Your Flashcards</h1>
+      <div className="w-full max-w-3xl mb-8">
+        <label htmlFor="setName" className="block text-2xl font-jua text-off-white mb-2">Set Name</label>
+        <div className="flex gap-2">
+          <input 
+            id="setName"
+            type="text"
+            value={setName}
+            onChange={(e) => setSetName(e.target.value)}
+            className="w-full p-3 rounded-xl border-2 border-teal bg-light-grey text-off-white font-jua text-lg outline-none focus:ring-2 focus:ring-teal"
+          />
+          <button
+            onClick={handleSaveSetName}
+            className="bg-teal hover:bg-teal-dark text-off-white font-jua text-lg rounded-xl px-6 py-2 shadow-md transition duration-200 font-bold"
+          >
+            Save Name
+          </button>
+        </div>
+      </div>
+      <h1 className="text-4xl font-jua text-off-white mb-10 text-center font-bold drop-shadow-lg">Edit Flashcards</h1>
       <div className="w-full max-w-3xl flex flex-col gap-8">
         {flashcards.map((card, index) => (
           <div key={card.id} className="bg-light-grey border-2 border-teal rounded-3xl shadow-xl p-8 relative">

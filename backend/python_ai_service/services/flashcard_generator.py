@@ -1,80 +1,22 @@
 from typing import Optional, List, Dict
 import uuid
 import os
+import json
 from dotenv import load_dotenv
-from transformers import pipeline
-from langchain_huggingface import HuggingFacePipeline
+import anthropic
 from python_ai_service.db.database import get_db_connection
 from psycopg2 import sql
 
 # Load environment variables
 load_dotenv()
-api_key = os.getenv("HUGGINGFACE_API_KEY")
+api_key = os.getenv("ANTHROPIC_API_KEY")
 
 # Check if API key is available
 if not api_key:
-    raise ValueError("Hugging Face API key is missing. Please set it in your .env file.")
+    raise ValueError("Anthropic API key is missing. Please set ANTHROPIC_API_KEY in your .env file.")
 
-def initialize_model():
-    try:
-        # Set up the Hugging Face pipeline and LangChain wrapper
-        llama3_pipeline = pipeline(
-            task="text-generation",
-            model="tiiuae/falcon-rw-1b",
-            token=api_key,
-            trust_remote_code=True,
-            max_length=512,
-            do_sample=True,
-            temperature=0.1,
-            max_new_tokens=256
-        )
-        print("Pipeline initialized successfully")
-        
-        llama3_llm = HuggingFacePipeline(
-            pipeline=llama3_pipeline,
-            model_kwargs={"temperature": 0.1}
-        )
-        print("LangChain wrapper initialized successfully")
-        return llama3_pipeline, llama3_llm
-    except Exception as e:
-        print(f"Error initializing model: {str(e)}")
-        raise
-
-# Initialize the model
-try:
-    llama3_pipeline, llama3_llm = initialize_model()
-except Exception as e:
-    print(f"Failed to initialize model: {str(e)}")
-    raise
-
-def format_flashcards_to_json(raw_content: str) -> List[Dict]:
-    """Convert raw flashcard content to JSON format."""
-    try:
-        # Split the content into individual flashcards
-        cards = raw_content.strip().split('\n\n')
-        formatted_cards = []
-        
-        for card in cards:
-            if not card.strip():
-                continue
-                
-            # Split into front and back
-            parts = card.split('\nBack:')
-            if len(parts) != 2:
-                continue
-                
-            front = parts[0].replace('Front:', '').strip()
-            back = parts[1].strip()
-            
-            formatted_cards.append({
-                'front': front,
-                'back': back
-            })
-            
-        return formatted_cards
-    except Exception as e:
-        print(f"Error formatting flashcards: {e}")
-        return []
+# Initialize Anthropic client
+client = anthropic.Anthropic(api_key=api_key)
 
 def generate_study_materials(
         topic: str,
@@ -83,7 +25,7 @@ def generate_study_materials(
         custom_count: Optional[int] = None,
         user_id: Optional[int] = None
 ) -> List[Dict]:
-    """Generate flashcards using HuggingFace pipeline with custom card counts."""
+    """Generate flashcards using Claude 3 Haiku API."""
     try:
         # Determine number of cards based on intensity level or custom count
         if custom_count and custom_count > 0:
@@ -102,74 +44,73 @@ def generate_study_materials(
                 depth_description = "Provide in-depth explanations with examples and applications."
 
         test_context = f" focusing on {test_name}" if test_name else ""
-        prompt = f"""Create {num_cards} flashcards about {topic}{test_context}. {depth_description}
+        
+        # Create a more structured prompt for better JSON output
+        prompt = f"""Create {num_cards} high-quality flashcards about {topic}{test_context}. {depth_description}
 
-Please format each flashcard exactly as follows:
-Front: [question or concept]
-Back: [answer or explanation]
+IMPORTANT: Return ONLY a valid JSON array of objects. Each object should have exactly two fields:
+- "front": The question or concept (string)
+- "back": The answer or explanation (string)
 
 Example format:
-Front: What is the capital of France?
-Back: Paris
+[
+  {{"front": "What is the capital of France?", "back": "Paris"}},
+  {{"front": "Define photosynthesis", "back": "The process by which plants convert sunlight into energy"}}
+]
 
-Make sure each flashcard is separated by a blank line and follows the Front: Back: format exactly."""
+Make sure the response is valid JSON that can be parsed directly. Do not include any text before or after the JSON array."""
 
+        print(f"Generating {num_cards} flashcards for topic: {topic}")
         print(f"Using prompt: {prompt[:200]}...")
 
-        # Generate flashcards using the pipeline
-        print(f"Generating text with prompt: {prompt[:100]}...")
+        # Generate flashcards using Claude 3 Haiku
         try:
-            generated_text = llama3_llm.invoke(prompt)
-            print(f"Generated text length: {len(generated_text) if generated_text else 0}")
-            print(f"Generated text preview: {generated_text[:500] if generated_text else 'None'}...")
-        except Exception as e:
-            print(f"Error generating text: {e}")
-            # Fall back to template-based flashcards
-            generated_text = ""
-
-        # Parse the result into flashcards
-        print("Parsing generated text into flashcards...")
-        flashcards = []
-        current_card = {}
-        
-        # Try multiple parsing strategies
-        lines = generated_text.split('\n') if generated_text else []
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-                
-            # Strategy 1: Look for "Front:" and "Back:" format
-            if line.startswith('Front:'):
-                if current_card and current_card.get('front'):
-                    flashcards.append(current_card)
-                current_card = {'front': line[6:].strip(), 'back': ''}
-            elif line.startswith('Back:'):
-                if current_card:
-                    current_card['back'] = line[5:].strip()
-            # Strategy 2: Look for numbered questions
-            elif line.startswith(('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.', '10.')):
-                if current_card and current_card.get('front'):
-                    flashcards.append(current_card)
-                current_card = {'front': line[3:].strip(), 'back': ''}
-            # Strategy 3: Look for "Q:" and "A:" format
-            elif line.startswith('Q:'):
-                if current_card and current_card.get('front'):
-                    flashcards.append(current_card)
-                current_card = {'front': line[2:].strip(), 'back': ''}
-            elif line.startswith('A:'):
-                if current_card:
-                    current_card['back'] = line[2:].strip()
+            response = client.messages.create(
+                model="claude-3-haiku-20240307",
+                max_tokens=4000,
+                temperature=0.3,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            )
+            
+            generated_content = response.content[0].text
+            print(f"Generated content length: {len(generated_content)}")
+            print(f"Generated content preview: {generated_content[:500]}...")
+            
+            # Parse the JSON response
+            try:
+                flashcards = json.loads(generated_content)
+                if not isinstance(flashcards, list):
+                    raise ValueError("Response is not a list")
                     
-        if current_card and current_card.get('front'):
-            flashcards.append(current_card)
+                # Validate each flashcard has the required fields
+                validated_flashcards = []
+                for card in flashcards:
+                    if isinstance(card, dict) and 'front' in card and 'back' in card:
+                        validated_flashcards.append({
+                            'front': str(card['front']),
+                            'back': str(card['back'])
+                        })
+                
+                flashcards = validated_flashcards
+                print(f"Successfully parsed {len(flashcards)} flashcards from JSON")
+                
+            except json.JSONDecodeError as e:
+                print(f"Failed to parse JSON: {e}")
+                print(f"Raw response: {generated_content}")
+                flashcards = []
+                
+        except Exception as e:
+            print(f"Error calling Claude API: {e}")
+            flashcards = []
 
-        print(f"Parsed {len(flashcards)} flashcards from generated text")
-        if flashcards:
-            print(f"Sample flashcard: Front: {flashcards[0].get('front', '')[:50]}... Back: {flashcards[0].get('back', '')[:50]}...")
-
-        # If parsing failed or no cards generated, create template-based flashcards
+        # If API call failed or parsing failed, create template-based flashcards
         if not flashcards:
+            print("Falling back to template-based flashcards")
             flashcards = [
                 {"front": f"What is {topic}?", "back": f"{topic} is a subject area that involves studying and understanding various concepts and principles."},
                 {"front": f"Define {topic}", "back": f"The study or practice of {topic} encompasses learning about its fundamental concepts and applications."},
@@ -242,4 +183,5 @@ Make sure each flashcard is separated by a blank line and follows the Front: Bac
         print(f"Returning {len(flashcards)} flashcards")
         return flashcards
     except Exception as error:
+        print(f"Error in generate_study_materials: {error}")
         return [{"front": "Error", "back": f"Failed to generate flashcards: {str(error)}"}] 

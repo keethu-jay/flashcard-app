@@ -1,15 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-
-interface User {
-  id: number;
-  username: string;
-  email: string;
-}
+import { useAuth } from '../contexts/AuthContext';
 
 const Header: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { user, isAuthenticated, login, logout } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [formData, setFormData] = useState({
@@ -18,30 +12,8 @@ const Header: React.FC = () => {
     password: ''
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    checkAuthStatus();
-  }, []);
-
-  const checkAuthStatus = async () => {
-    try {
-      const response = await fetch('http://localhost:5000/check-auth', {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      
-      if (data.authenticated) {
-        setIsAuthenticated(true);
-        setUser(data.user);
-      } else {
-        setIsAuthenticated(false);
-        setUser(null);
-      }
-    } catch (error) {
-      console.error('Error checking auth status:', error);
-    }
-  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -61,7 +33,7 @@ const Header: React.FC = () => {
         ? { username: formData.username, password: formData.password }
         : formData;
 
-      const response = await fetch(`http://localhost:5000${endpoint}`, {
+      const response = await fetch(`http://localhost:5001${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -73,8 +45,7 @@ const Header: React.FC = () => {
       const data = await response.json();
 
       if (response.ok) {
-        setIsAuthenticated(true);
-        setUser(data.user);
+        login(data.user);
         setShowAuthModal(false);
         setFormData({ username: '', email: '', password: '' });
         alert(authMode === 'login' ? 'Login successful!' : 'Registration successful!');
@@ -90,17 +61,8 @@ const Header: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    try {
-      await fetch('http://localhost:5000/logout', {
-        method: 'POST',
-        credentials: 'include'
-      });
-      setIsAuthenticated(false);
-      setUser(null);
-      navigate('/');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
+    await logout();
+    navigate('/');
   };
 
   const openAuthModal = (mode: 'login' | 'register') => {
@@ -123,11 +85,8 @@ const Header: React.FC = () => {
               </Link>
               {isAuthenticated && (
                 <>
-                  <Link to="/dashboard" className="hover:text-blue-200 transition-colors">
+                  <Link to="/library" className="hover:text-blue-200 transition-colors">
                     Library
-                  </Link>
-                  <Link to="/edit-cards" className="hover:text-blue-200 transition-colors">
-                    Edit Cards
                   </Link>
                 </>
               )}
@@ -138,6 +97,13 @@ const Header: React.FC = () => {
             {isAuthenticated ? (
               <div className="flex items-center space-x-4">
                 <span className="text-sm">Welcome, {user?.username}!</span>
+                <Link to="/profile">
+                  <img 
+                    src={user?.profile_image_url || 'https://via.placeholder.com/40'} 
+                    alt="Profile"
+                    className="w-10 h-10 rounded-full object-cover border-2 border-white hover:border-blue-200 transition"
+                  />
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded transition-colors"
@@ -216,14 +182,32 @@ const Header: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Password
                 </label>
-                <input
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? (
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                      </svg>
+                    ) : (
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
 
               <button

@@ -4,7 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "ts-node src/server.ts",
+    "dev": "ts-node src/server.ts",
+    "start:python": "cd python_ai_service && python app.py",
+    "dev:python": "cd python_ai_service && python app.py"
   },
   "keywords": [],
   "author": "",

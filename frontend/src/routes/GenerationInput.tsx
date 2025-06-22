@@ -38,7 +38,9 @@ const GenerationInput: React.FC = () => {
         }
       }
 
-      const response = await axios.post('http://localhost:5000/generate_flashcards', requestData);
+      const response = await axios.post('http://localhost:5001/generate_flashcards', requestData, {
+        withCredentials: true
+      });
 
       console.log('Flashcards generated:', response.data);
       
